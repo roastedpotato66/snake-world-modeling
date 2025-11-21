@@ -9,24 +9,14 @@ import time
 import os
 
 # --- Config ---
-MODEL_PATH = "output/checkpoints/model_epoch_20.pt" 
+MODEL_PATH = "output/pro/best_model" 
 IMG_SIZE = 64
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 # --- Load Model ---
 print(f"Loading Neural Engine from {MODEL_PATH}...")
-model = UNet2DModel(
-    sample_size=IMG_SIZE,
-    in_channels=6,
-    out_channels=3,
-    layers_per_block=2,
-    block_out_channels=(64, 128, 256, 512),
-    down_block_types=("DownBlock2D", "DownBlock2D", "AttnDownBlock2D", "AttnDownBlock2D"),
-    up_block_types=("AttnUpBlock2D", "AttnUpBlock2D", "UpBlock2D", "UpBlock2D"),
-    class_embed_type="timestep",
-    num_class_embeds=4
-)
-model.load_state_dict(torch.load(MODEL_PATH, map_location=DEVICE))
+
+model = UNet2DModel.from_pretrained("output/pro/best_model").to(DEVICE)
 model.to(DEVICE)
 model.eval()
 
