@@ -213,6 +213,7 @@ logs/
 # mac specific
 .DS_Store
 
-ddim_overview.md
 debug_outputs/
-ddim_debug.md
+
+data/
+output/
