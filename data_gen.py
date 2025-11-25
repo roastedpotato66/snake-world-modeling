@@ -1,7 +1,7 @@
+# data_gen.py v2
 import pygame
 import random
 import os
-import numpy as np
 import pandas as pd
 import uuid
 import argparse
@@ -17,11 +17,10 @@ CELL_SIZE = IMG_SIZE // GRID_SIZE
 # Colors
 BLACK = (0, 0, 0)
 WHITE = (255, 255, 255) # Body
-RED = (255, 0, 0)      # Food
-GREEN = (0, 255, 0)    # Body
-BLUE = (0, 0, 255)     # Head (New!)
-GRAY = (100, 100, 100) # Dead Body
-DARK_RED = (50, 0, 0)  # Dead Background
+RED = (255, 0, 0)       # Food
+BLUE = (0, 0, 255)      # Head
+GRAY = (50, 50, 50)     # Dead Body
+DARK_RED = (40, 0, 0)   # Dead Background
 
 # Actions
 ACTION_UP = 0
@@ -93,10 +92,9 @@ class SnakeGame:
         bg_color = DARK_RED if self.dead else BLACK
         surface.fill(bg_color)
         
-        # Draw Food (slightly smaller for style)
+        # Draw Food
         rect_x = self.food[0] * CELL_SIZE
         rect_y = self.food[1] * CELL_SIZE
-        # Inset by 1 pixel on all sides to create a gap
         rect = pygame.Rect(rect_x+1, rect_y+1, CELL_SIZE-2, CELL_SIZE-2)
         pygame.draw.rect(surface, RED, rect)
         
@@ -104,21 +102,20 @@ class SnakeGame:
         for i, segment in enumerate(self.body):
             rect_x = segment[0] * CELL_SIZE
             rect_y = segment[1] * CELL_SIZE
-            # Inset by 1 pixel to create grid lines
             rect = pygame.Rect(rect_x+1, rect_y+1, CELL_SIZE-2, CELL_SIZE-2)
             
             if self.dead:
                 color = GRAY
             else:
-                # Index 0 is Head -> BLUE, Others -> WHITE
                 color = BLUE if i == 0 else WHITE
                 
             pygame.draw.rect(surface, color, rect)
             
         return surface
 
-def get_bot_action(game, epsilon=0.05):
-    # Random move (suicide/exploration)
+def get_bot_action(game, epsilon=0.1):
+    # Slightly increased epsilon to ensure we get some "bad moves" / collisions
+    # so the model learns what death looks like.
     if random.random() < epsilon:
         return random.choice([ACTION_UP, ACTION_DOWN, ACTION_LEFT, ACTION_RIGHT])
 
@@ -154,6 +151,7 @@ def is_safe(game, action):
     if x < 0 or x >= GRID_SIZE or y < 0 or y >= GRID_SIZE: return False
     if [x, y] in game.body[:-1]: return False
     
+    # Prevent immediate 180 (neck break)
     if (action == ACTION_UP and game.direction == ACTION_DOWN) or \
        (action == ACTION_DOWN and game.direction == ACTION_UP) or \
        (action == ACTION_LEFT and game.direction == ACTION_RIGHT) or \
@@ -170,97 +168,98 @@ def generate_worker(args):
     records = []
     img_dir = os.path.join(output_dir, "images")
     
-    current_surface = game.render_surface()
-    current_img_name = f"{worker_id}_{uuid.uuid4().hex}.png"
-    pygame.image.save(current_surface, os.path.join(img_dir, current_img_name))
-
+    # Episode ID ensures we don't stack frames across game resets
+    episode_id = f"{worker_id}_{uuid.uuid4().hex[:8]}"
+    frame_idx = 0
+    
     frames_generated = 0
+    
+    # Save initial state
+    current_surface = game.render_surface()
+    img_name = f"{episode_id}_{frame_idx:05d}.png"
+    pygame.image.save(current_surface, os.path.join(img_dir, img_name))
+
     while frames_generated < target_count:
-        action = get_bot_action(game, epsilon=0.05)
+        # 1. Decide Action
+        action = get_bot_action(game, epsilon=0.08)
+        
+        # 2. Step Game
         is_dead, _ = game.step(action)
         
-        next_surface = game.render_surface()
-        next_img_name = f"{worker_id}_{uuid.uuid4().hex}.png"
-        pygame.image.save(next_surface, os.path.join(img_dir, next_img_name))
-        
+        # 3. Save Record (State t, Action t)
+        # Note: We record the image filename of the state *before* the action took place
+        # The loader will find the *next* image by looking at the next row in CSV
         records.append({
-            "current_image": current_img_name,
+            "episode_id": episode_id,
+            "frame_number": frame_idx,
+            "image_file": img_name,
             "action": action,
-            "next_image": next_img_name
+            "is_dead": is_dead
         })
         
         frames_generated += 1
+        frame_idx += 1
+        
+        # 4. Render New State
+        next_surface = game.render_surface()
         
         if is_dead:
-            game.reset()
-            current_surface = game.render_surface()
-            current_img_name = f"{worker_id}_{uuid.uuid4().hex}.png"
-            pygame.image.save(current_surface, os.path.join(img_dir, current_img_name))
-        else:
-            current_surface = next_surface
-            current_img_name = next_img_name
+            # Save the death frame
+            img_name = f"{episode_id}_{frame_idx:05d}.png"
+            pygame.image.save(next_surface, os.path.join(img_dir, img_name))
+            
+            # Save one last record for the death state (action is irrelevant, but needed for alignment)
+            records.append({
+                "episode_id": episode_id,
+                "frame_number": frame_idx,
+                "image_file": img_name,
+                "action": 0, # Placeholder
+                "is_dead": True
+            })
 
-        if frames_generated % 2000 == 0:
+            # RESET GAME
+            game.reset()
+            episode_id = f"{worker_id}_{uuid.uuid4().hex[:8]}"
+            frame_idx = 0
+            
+            # Save new initial state
+            current_surface = game.render_surface()
+            img_name = f"{episode_id}_{frame_idx:05d}.png"
+            pygame.image.save(current_surface, os.path.join(img_dir, img_name))
+            
+        else:
+            # Continue episode
+            img_name = f"{episode_id}_{frame_idx:05d}.png"
+            pygame.image.save(next_surface, os.path.join(img_dir, img_name))
+
+        if frames_generated % 5000 == 0:
              print(f"Worker {worker_id}: {frames_generated}/{target_count}")
 
     df = pd.DataFrame(records)
     df.to_csv(os.path.join(output_dir, f"metadata_{worker_id}.csv"), index=False)
 
-def run_test_mode():
-    pygame.init()
-    screen = pygame.display.set_mode((512, 512))
-    pygame.display.set_caption("Neural Snake - Visual Test (Blue Head + Gaps)")
-    clock = pygame.time.Clock()
-    game = SnakeGame()
-    running = True
-    
-    while running:
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT: running = False
-            if event.type == pygame.KEYDOWN and event.key == pygame.K_r: game.reset()
-
-        if not game.dead:
-            action = get_bot_action(game, epsilon=0.05)
-            game.step(action)
-        else:
-            time.sleep(0.5)
-            game.reset()
-            
-        surface_64 = game.render_surface()
-        surface_scaled = pygame.transform.scale(surface_64, (512, 512))
-        screen.blit(surface_scaled, (0,0))
-        pygame.display.flip()
-        
-        clock.tick(10) 
-        
-    pygame.quit()
-
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--test", action="store_true", help="Run visually to check bot behavior")
-    parser.add_argument("--count", type=int, default=100000)
-    parser.add_argument("--output", type=str, default="data")
-    parser.add_argument("--parallel", action="store_true")
-    parser.add_argument("--zip", action="store_true", help="Zip the output folder for Colab")
+    parser.add_argument("--count", type=int, default=200000)
+    parser.add_argument("--output", type=str, default="data_v2")
+    parser.add_argument("--parallel", action="store_true", default=True)
+    parser.add_argument("--workers", type=int, default=8)
     args = parser.parse_args()
-
-    if args.test:
-        run_test_mode()
-        return
 
     if os.path.exists(args.output):
         shutil.rmtree(args.output)
     os.makedirs(os.path.join(args.output, "images"))
 
-    num_workers = max(1, cpu_count() - 1) if args.parallel else 1
+    num_workers = min(args.workers, cpu_count())
     frames_per_worker = args.count // num_workers
     worker_args = [(frames_per_worker, args.output, i) for i in range(num_workers)]
     
-    print(f"Generating {args.count} frames (Blue Head + Grid Gaps) using {num_workers} workers...")
+    print(f"Generating {args.count} frames... (Workers: {num_workers})")
     start = time.time()
     
     if args.parallel:
-        with Pool(num_workers) as p: p.map(generate_worker, worker_args)
+        with Pool(num_workers) as p: 
+            p.map(generate_worker, worker_args)
     else:
         generate_worker(worker_args[0])
 
@@ -273,14 +272,12 @@ def main():
             
     if all_dfs:
         final_df = pd.concat(all_dfs, ignore_index=True)
+        # Sort just in case to ensure sequential order per episode
+        final_df = final_df.sort_values(by=['episode_id', 'frame_number'])
         final_df.to_csv(os.path.join(args.output, "metadata.csv"), index=False)
     
     print(f"Generation complete in {time.time()-start:.2f}s")
-
-    if args.zip:
-        print("Zipping dataset for Colab upload...")
-        shutil.make_archive("snake_dataset", 'zip', args.output)
-        print("Created snake_dataset.zip")
+    print(f"Dataset saved to: {args.output}")
 
 if __name__ == "__main__":
     main()
