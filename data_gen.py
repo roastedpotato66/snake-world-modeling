@@ -113,7 +113,7 @@ class SnakeGame:
             
         return surface
 
-def get_bot_action(game, epsilon=0.1):
+def get_bot_action(game, epsilon=0.9):
     # Slightly increased epsilon to ensure we get some "bad moves" / collisions
     # so the model learns what death looks like.
     if random.random() < epsilon:
@@ -181,7 +181,7 @@ def generate_worker(args):
 
     while frames_generated < target_count:
         # 1. Decide Action
-        action = get_bot_action(game, epsilon=0.08)
+        action = get_bot_action(game, epsilon=0.9)
         
         # 2. Step Game
         is_dead, _ = game.step(action)
@@ -241,7 +241,7 @@ def generate_worker(args):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--count", type=int, default=200000)
-    parser.add_argument("--output", type=str, default="data_v2")
+    parser.add_argument("--output", type=str, default="data_v4")
     parser.add_argument("--parallel", action="store_true", default=True)
     parser.add_argument("--workers", type=int, default=8)
     args = parser.parse_args()
