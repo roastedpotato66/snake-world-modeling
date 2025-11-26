@@ -1,4 +1,4 @@
-# data_gen.py v2
+# data_gen.py v3
 import pygame
 import random
 import os
@@ -8,6 +8,7 @@ import argparse
 import time
 import shutil
 from multiprocessing import Pool, cpu_count
+import numpy as np
 
 # --- Configuration ---
 IMG_SIZE = 64
@@ -50,8 +51,11 @@ class SnakeGame:
                 return food
 
     def step(self, action):
+        """
+        Returns: (is_dead, is_eating, score)
+        """
         if self.dead:
-            return True, self.score
+            return True, False, self.score
 
         # Prevent 180 turns
         if (action == ACTION_UP and self.direction == ACTION_DOWN) or \
@@ -72,18 +76,20 @@ class SnakeGame:
         # Check Collisions
         if (x < 0 or x >= GRID_SIZE or y < 0 or y >= GRID_SIZE or new_head in self.body):
             self.dead = True
-            return True, self.score
+            return True, False, self.score
 
         self.head = new_head
         self.body.insert(0, new_head)
         
+        is_eating = False
         if self.head == self.food:
             self.score += 1
             self.food = self._spawn_food()
+            is_eating = True
         else:
             self.body.pop()
             
-        return False, self.score
+        return False, is_eating, self.score
 
     def render_surface(self):
         surface = pygame.Surface((IMG_SIZE, IMG_SIZE))
@@ -113,9 +119,8 @@ class SnakeGame:
             
         return surface
 
-def get_bot_action(game, epsilon=0.9):
-    # Slightly increased epsilon to ensure we get some "bad moves" / collisions
-    # so the model learns what death looks like.
+def get_bot_action(game, epsilon=0.3):
+    # to reach the food. We need "competent" gameplay to generate "eating" frames.
     if random.random() < epsilon:
         return random.choice([ACTION_UP, ACTION_DOWN, ACTION_LEFT, ACTION_RIGHT])
 
@@ -181,20 +186,19 @@ def generate_worker(args):
 
     while frames_generated < target_count:
         # 1. Decide Action
-        action = get_bot_action(game, epsilon=0.9)
+        action = get_bot_action(game, epsilon=0.3)
         
         # 2. Step Game
-        is_dead, _ = game.step(action)
+        is_dead, is_eating, _ = game.step(action)
         
         # 3. Save Record (State t, Action t)
-        # Note: We record the image filename of the state *before* the action took place
-        # The loader will find the *next* image by looking at the next row in CSV
         records.append({
             "episode_id": episode_id,
             "frame_number": frame_idx,
             "image_file": img_name,
             "action": action,
-            "is_dead": is_dead
+            "is_dead": is_dead,
+            "is_eating": is_eating, # <--- Tracking this now
         })
         
         frames_generated += 1
@@ -208,13 +212,14 @@ def generate_worker(args):
             img_name = f"{episode_id}_{frame_idx:05d}.png"
             pygame.image.save(next_surface, os.path.join(img_dir, img_name))
             
-            # Save one last record for the death state (action is irrelevant, but needed for alignment)
+            # Save one last record for the death state
             records.append({
                 "episode_id": episode_id,
                 "frame_number": frame_idx,
                 "image_file": img_name,
-                "action": 0, # Placeholder
-                "is_dead": True
+                "action": 0,
+                "is_dead": True,
+                "is_eating": False
             })
 
             # RESET GAME
@@ -241,7 +246,7 @@ def generate_worker(args):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--count", type=int, default=200000)
-    parser.add_argument("--output", type=str, default="data_v4")
+    parser.add_argument("--output", type=str, default="data_v5")
     parser.add_argument("--parallel", action="store_true", default=True)
     parser.add_argument("--workers", type=int, default=8)
     args = parser.parse_args()
@@ -272,7 +277,6 @@ def main():
             
     if all_dfs:
         final_df = pd.concat(all_dfs, ignore_index=True)
-        # Sort just in case to ensure sequential order per episode
         final_df = final_df.sort_values(by=['episode_id', 'frame_number'])
         final_df.to_csv(os.path.join(args.output, "metadata.csv"), index=False)
     
