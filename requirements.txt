@@ -1,0 +1,31 @@
+# Snake World Modeling - Requirements
+# 
+# Core dependencies (required for train_pixel_edm.py and most scripts)
+# Deep Learning and ML Framework
+torch>=2.0.0
+torchvision>=0.15.0
+
+# Data Processing
+numpy>=1.24.0
+pandas>=2.0.0
+Pillow>=10.0.0
+
+# Utilities
+tqdm>=4.65.0
+
+# Optional dependencies (for other training scripts)
+# Diffusion Models (for train_diffusion_v*.py scripts)
+diffusers>=0.21.0
+
+# Training Acceleration (for train_diffusion_v*.py scripts)
+accelerate>=0.20.0
+
+# Visualization (for diagnose_pipeline.py and visualization scripts)
+matplotlib>=3.7.0
+
+# Image Processing (for play*.py scripts)
+opencv-python>=4.8.0
+
+# Game Engine (for data_gen.py - data generation)
+pygame>=2.5.0
+
