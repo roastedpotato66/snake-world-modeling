@@ -215,9 +215,13 @@ logs/
 
 debug_outputs/
 
+# Data directories (keep data_v5 for reference, but ignore images)
 data/
 data_v2/
 data_v3/
 data_v4/
-data_v5/
+data_v5/images/
 output/
+
+# Archive (optional - uncomment if you don't want to track old code)
+# archive/
