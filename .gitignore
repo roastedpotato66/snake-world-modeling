@@ -223,5 +223,8 @@ data_v4/
 data_v5/images/
 output/
 
-# Archive (optional - uncomment if you don't want to track old code)
+# Archive
 # archive/
+
+# Hugging Face
+upload_to_hf.py
