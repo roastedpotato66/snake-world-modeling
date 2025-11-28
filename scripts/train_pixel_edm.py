@@ -8,10 +8,14 @@ import torch.nn.functional as F
 from torch.utils.data import DataLoader, random_split
 import numpy as np
 import os
+import sys
 import argparse
 from tqdm.auto import tqdm
 from torchvision.utils import save_image
 import csv
+
+# Add parent directory to path for imports
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 # Import from src modules
 from src.models.pixel_edm import PixelSpaceUNet, EDMPrecond, EDMSampler
@@ -80,7 +84,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--img_dir", type=str, default="data_v5/images")
     parser.add_argument("--metadata", type=str, default="data_v5/metadata.csv")
-    parser.add_argument("--output_dir", type=str, default="output/pixel_edm")
+    parser.add_argument("--output_dir", type=str, default="output/pixel_edm_v2")
     parser.add_argument("--epochs", type=int, default=40)
     parser.add_argument("--batch_size", type=int, default=512)
     parser.add_argument("--lr", type=float, default=1e-4)

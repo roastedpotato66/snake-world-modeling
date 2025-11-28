@@ -8,14 +8,19 @@ import numpy as np
 import cv2
 import argparse
 import os
+import sys
 import time
 import glob
 import random
 from PIL import Image
 from torchvision import transforms
 
+# Add parent directory to path for imports
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 # Import from src modules
-from src.models.pixel_edm import PixelSpaceUNet, EDMSampler, CONTEXT_FRAMES, ACTION_DIM
+from src.models.pixel_edm import PixelSpaceUNet, EDMSampler, ACTION_DIM
+from src.data.pixel_dataset import CONTEXT_FRAMES
 
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 IMG_SIZE = 64
@@ -80,7 +85,7 @@ def get_random_real_context(data_dir):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--model_path", type=str, default="output/pixel_edm/best_model/model.pt")
+    parser.add_argument("--model_path", type=str, default="output/pixel_edm_v2/best_model/model.pt")
     parser.add_argument("--data_dir", type=str, default="data_v5/images")
     parser.add_argument("--fps", type=int, default=8)
     parser.add_argument("--cfg_scale", type=float, default=2.0)
